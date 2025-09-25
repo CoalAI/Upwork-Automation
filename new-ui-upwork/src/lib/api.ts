@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_APP_URL || "http://localhost:8012";
+const API_BASE_URL = import.meta.env.VITE_APP_URL || "http://173.249.57.177:8012";
 
 export interface RelevanceStatus {
   is_enabled_override: boolean;
