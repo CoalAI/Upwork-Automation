@@ -130,7 +130,7 @@ const JobsPage: React.FC<JobsPageProps> = ({ apiUrl }) => {
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
   const [lastRefreshTime, setLastRefreshTime] = useState<Date>(new Date());
   const [nextPollTime, setNextPollTime] = useState<Date>(new Date(Date.now() + 90000));
-  const apiUrlToUse = apiUrl || import.meta.env.VITE_APP_URL || "http://localhost:8001";
+  const apiUrlToUse = apiUrl || import.meta.env.VITE_APP_URL || "http://localhost:8012";
 
   // Use refs to store the latest versions of functions to avoid dependency issues
   const fetchJobsByRelevanceRef = useRef<typeof fetchJobsByRelevance>();
