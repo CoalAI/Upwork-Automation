@@ -22,7 +22,10 @@ import hashlib
 import faiss
 import numpy as np
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel
+from app.api.routes.auth import get_current_user
+
+
+
 
 class ToggleRequest(BaseModel):
     enabled: bool
@@ -633,7 +636,7 @@ def analyze_jobs_in_batch(jobs: List[JobData], openai_client: openai.OpenAI) -> 
 
 
 @router.post("/analyze_batch_rag")
-async def analyze_job_batch_rag(job_ids: List[str], db: Session = Depends(get_db)):
+async def analyze_job_batch_rag(job_ids: List[str], db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
     """Analyze a batch of jobs by their IDs using RAG and return relevance scores."""
 
     if not is_relevance_check_enabled():
@@ -779,7 +782,10 @@ async def get_relevance_status():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/process_new_jobs_cron")
-async def process_new_jobs_cron(db: Session = Depends(get_db)):
+async def process_new_jobs_cron(
+    db: Session = Depends(get_db),
+    _user: str = Depends(get_current_user)   # <-- missing parenthesis fixed
+):
     """
     Cron job endpoint to fetch latest jobs by publishedDateTime,
     identify new ones, batch them, and send for relevance analysis IN PARALLEL.

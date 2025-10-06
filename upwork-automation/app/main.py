@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import job_listings, rag_relevance
+from app.api.routes import job_listings, rag_relevance, auth
 from app.db.database import Base, engine
-
+# from app.api.routes import auth
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Upwork Automation Tool API")
@@ -16,7 +16,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(job_listings.router, prefix="/api/job-listings", tags=["job-listings"])
 app.include_router(rag_relevance.router, prefix="/api", tags=["jobs"])
 
