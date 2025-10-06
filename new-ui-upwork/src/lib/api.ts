@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-const API_BASE_URL = import.meta.env.VITE_APP_URL || "http://173.249.57.177:8012";
-=======
 // const API_BASE_URL = import.meta.env.VITE_APP_URL || "http://localhost:8012";
 
 // export interface RelevanceStatus {
@@ -110,29 +107,15 @@ const API_BASE_URL = import.meta.env.VITE_APP_URL || "http://173.249.57.177:8012
 // console.log('API Client initialized with base URL:', API_BASE_URL);
 // console.log('Environment variable VITE_APP_URL:', import.meta.env.VITE_APP_URL); 
 // src/lib/api.ts
-const API_BASE_URL = import.meta.env.VITE_APP_URL || "http://localhost:8012";
->>>>>>> 8fc78af (working login)
+const API_BASE_URL = import.meta.env.VITE_APP_URL || "http://173.249.57.177:8012";
 
 export interface RelevanceStatus {
   is_enabled_override: boolean;
   is_within_schedule: boolean;
   effective_status: boolean;
 }
-
-export interface ToggleRequest {
-  enabled: boolean;
-}
-
-export interface ToggleResponse {
-  is_enabled_override: boolean;
-  is_within_schedule: boolean;
-  effective_status: boolean;
-}
-
-export interface ProposalTemplate {
-  content: string;
-}
-
+export interface ToggleResponse extends RelevanceStatus {}
+export interface ProposalTemplate { content: string }
 export interface JobProcessingResult {
   status: string;
   message: string;
@@ -142,149 +125,93 @@ export interface JobProcessingResult {
 }
 
 class ApiClient {
-  private baseUrl: string;
-
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
+  constructor(private baseUrl: string) {
+    if (!this.baseUrl) throw new Error("API base URL is not configured");
   }
 
-  // ---- Public (no-auth) request, e.g., /health
-  private async requestPublic<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    if (!this.baseUrl) throw new Error("API base URL is not configured");
-    const url = `${this.baseUrl}${endpoint}`;
+  // public request (no auth)
+  private async requestPublic<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const res = await fetch(`${this.baseUrl}${endpoint}`, {
+      ...options,
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Request failed" }));
+      throw new Error(err.detail || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+  }
 
-    const response = await fetch(url, {
+  // authenticated request
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
         ...(options.headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ detail: "Request failed" }));
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    return response.json();
-  }
-
-  // ---- Authenticated request (adds Bearer token, redirects on 401)
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    if (!this.baseUrl) throw new Error("API base URL is not configured");
-    const url = `${this.baseUrl}${endpoint}`;
-
-    const token = localStorage.getItem("token");
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-
-    const response = await fetch(url, { ...options, headers });
-
-    if (response.status === 401) {
-      // Token missing/expired — force login
+    if (res.status === 401) {
       localStorage.removeItem("token");
       window.location.href = "/login";
       throw new Error("Unauthorized");
     }
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ detail: "Request failed" }));
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Request failed" }));
+      throw new Error(err.detail || `HTTP ${res.status}: ${res.statusText}`);
     }
-
-    return response.json();
+    return res.json();
   }
 
-  // ---------- Public: API availability check ----------
-  async health(): Promise<{ ok: boolean }> {
-    // backend should have @app.get("/health") -> {"ok": true}
-    return this.requestPublic<{ ok: boolean }>("/health");
-  }
-
-  // ---------- Auth ----------
+  // ---- Auth
   async login(username: string, password: string): Promise<string> {
-    const body = new URLSearchParams();
-    body.append("username", username);
-    body.append("password", password);
-
+    const body = new URLSearchParams({ username, password });
     const res = await fetch(`${this.baseUrl}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),
     });
-
     if (!res.ok) throw new Error("Invalid login credentials");
     const data = await res.json();
     if (!data?.access_token) throw new Error("No token returned from login");
-
     localStorage.setItem("token", data.access_token);
     return data.access_token;
   }
-
-  setToken(token: string) {
-    localStorage.setItem("token", token);
-  }
-
-  logout() {
-    localStorage.removeItem("token");
-    window.location.href = "/login";
-  }
-
-  // (optional) verify token on refresh
+  setToken(t: string) { localStorage.setItem("token", t); }
+  logout() { localStorage.removeItem("token"); window.location.href = "/login"; }
   async getMe(): Promise<{ username: string; role: string } | null> {
-    try {
-      return await this.request<{ username: string; role: string }>("/auth/me");
-    } catch {
-      return null;
-    }
+    try { return await this.request("/auth/me"); } catch { return null; }
   }
 
-  // ---------- Protected APIs ----------
-  async getRelevanceStatus(): Promise<RelevanceStatus> {
-    return this.request<RelevanceStatus>("/api/relevance/status");
+  // ---- Protected APIs used in UI
+  getRelevanceStatus(): Promise<RelevanceStatus> {
+    return this.request("/api/relevance/status");
   }
-
-  async toggleRelevanceCheck(enabled: boolean): Promise<ToggleResponse> {
-    return this.request<ToggleResponse>("/api/relevance/toggle", {
+  toggleRelevanceCheck(enabled: boolean): Promise<ToggleResponse> {
+    return this.request("/api/relevance/toggle", {
       method: "POST",
       body: JSON.stringify({ enabled }),
     });
   }
-
-  async getProposalTemplate(): Promise<ProposalTemplate> {
-    return this.request<ProposalTemplate>("/api/template/proposal-template");
+  getProposalTemplate(): Promise<ProposalTemplate> {
+    return this.request("/api/template/proposal-template");
   }
-
-  async updateProposalTemplate(content: string): Promise<{ message: string }> {
-    return this.request<{ message: string }>("/api/template/proposal-template", {
+  updateProposalTemplate(content: string): Promise<{ message: string }> {
+    return this.request("/api/template/proposal-template", {
       method: "PUT",
       body: JSON.stringify({ content }),
     });
   }
-
-  async processNewJobsCron(): Promise<JobProcessingResult> {
-    return this.request<JobProcessingResult>("/api/process_new_jobs_cron", {
-      method: "POST",
-    });
+  processNewJobsCron(): Promise<JobProcessingResult> {
+    return this.request("/api/process_new_jobs_cron", { method: "POST" });
   }
 }
-
+s
 export const apiClient = new ApiClient(API_BASE_URL);
 
-// Debug logging
-<<<<<<< HEAD
-console.log('API Client initialized with base URL:', API_BASE_URL);
-console.log('Environment variable VITE_APP_URL:', import.meta.env.VITE_APP_URL); 
-=======
-console.log("API Client initialized with base URL:", API_BASE_URL);
-console.log("Environment variable VITE_APP_URL:", import.meta.env.VITE_APP_URL);
->>>>>>> 8fc78af (working login)
+// Helpful debug
+console.log("API Client base URL:", API_BASE_URL);
+console.log("VITE_APP_URL:", import.meta.env.VITE_APP_URL);
